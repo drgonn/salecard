@@ -1,0 +1,14 @@
+*.xml
+*.pyc
+
+
+/env/
+venv
+/tmp/
+/.idea/
+/__pycache__/
+
+
+
+celerybeat-schedule
+
