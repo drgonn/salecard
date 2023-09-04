@@ -52,7 +52,7 @@ MIDDLEWARE = [
     'myapp.wechat_auth.WechatIdMiddleware',
 ]
 
-AUTHENTICATION_BACKENDS = ['myapp.wechat_auth.WechatIdAuthBackend']
+# AUTHENTICATION_BACKENDS = ['myapp.wechat_auth.WechatIdAuthBackend']
 
 ROOT_URLCONF = 'salecard.urls'
 
@@ -135,3 +135,18 @@ STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+import datetime
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
+    ),
+}
+
+JWT_AUTH = {
+    'JWT_SECRET_KEY': 'YOUR_SECRET_KEY',  # 替换为一个随机的密钥
+    'JWT_ALGORITHM': 'HS256',
+    'JWT_ALLOW_REFRESH': True,
+    'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(days=7),
+    'JWT_EXPIRATION_DELTA': datetime.timedelta(hours=10),  # 设置token过期时间
+}

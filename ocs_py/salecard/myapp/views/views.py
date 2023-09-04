@@ -3,9 +3,9 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 # 模型
-from myapp.models import UserProfile,Role, Company, Application, HashValue
+from myapp.models import UserProfile,Role, Company, Application, HashValue, Card
 from myapp.form import CompanyForm
-
+from myapp.wechat_auth import generate_jwt_token, verify_and_decode_token
 
 from myapp.serializers.auth import UserRegistrationSerializer,UserProfileSerializer
 from django.http import JsonResponse
@@ -28,6 +28,8 @@ from django.core.paginator import Paginator
 import hashlib
 from datetime import datetime
 import os
+import json
+import requests
 from django.conf import settings
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
@@ -81,21 +83,23 @@ def user_login(request):
     return render(request, 'login.html', {'form': form})
 
 @csrf_exempt
+@login_required
 def get_user_info(request):
-    user_profile = request.user_profile
+    # user_profile = request.user_profile
+    # print(user_profile)
+    user = request.user
+    print(user)
 
-    if user_profile:
         # 用户已登录，可以获取用户信息
-        user_info = {
-            'id': user_profile.user.id,
-            'name': user_profile.name,
-            'card_nums': user_profile.card_nums,
-            'role': user_profile.user.groups.first().name,
-        }
-        return JsonResponse({'user_info': user_info})
-    else:
-        # 用户未登录或未找到用户信息，返回相应的错误信息
-        return JsonResponse({'error': 'User not found or not logged in'})
+    user_info = {
+        'id': user.userprofile.user.id,
+        'name': user.userprofile.name,
+        'card_nums': user.userprofile.card_nums,
+        # 'role': user.userprofile.user.groups.first().name,
+        'role': user.userprofile.role.name,
+    }
+    return JsonResponse({'user_info': user_info})
+
 
 @csrf_exempt
 def generate_unique_filename(file):
@@ -106,6 +110,8 @@ def generate_unique_filename(file):
 
 @csrf_exempt
 def upload_image(request):
+    print(request.method)
+    print(request.FILES)
     if request.method == 'POST' and request.FILES.get('image'):
         image = request.FILES['image']
         image_name = generate_unique_filename(image)
@@ -170,26 +176,26 @@ def company_detail(request, company_id):
 @csrf_exempt
 def create_company(request):
     if request.method == 'POST':
-        form = CompanyForm(request.POST)
-        if form.is_valid():
-            company = form.save()
-            applicant = request.user
-            company_id =  company.id
-            application_type = '注册公司'
+        json_data = json.loads(request.body.decode('utf-8'))
+        company_name = json_data.get('name')
+        print(company_name)
+
 
             # 创建申请对象
-            application = Application(
-                applicant=applicant,
-                application_type=application_type,
-                application_info=f'申请注册公司，公司ID：{company_id}',
-                application_arg=str(company_id),
-            )
-            application.save()
+            # application = Application(
+            #     applicant=applicant,
+            #     application_type=application_type,
+            #     application_info=f'申请注册公司，公司ID：{company_id}',
+            #     application_arg=str(company_id),
+            # )
+            # application.save()
 
-            return JsonResponse({'message': 'Company created successfully', 'company_id': company.id})
-        else:
-            errors = form.errors.as_json()
-            return JsonResponse({'error': errors}, status=400)
+        return JsonResponse({'message': 'Company created successfully',
+            #  'company_id': company.id
+             })
+        # else:
+        #     errors = form.errors.as_json()
+        #     return JsonResponse({'error': errors}, status=400)
     else:
         return JsonResponse({'error': 'Invalid request'}, status=400)
 
@@ -204,6 +210,7 @@ def create_company(request):
 def update_company(request, company_id):
     try:
         company = Company.objects.get(id=company_id)
+
 
         # 检查用户权限
         if request.user == company.boss:
@@ -605,6 +612,7 @@ def is_company_owner(user):
 
 
 
+@csrf_exempt
 def get_card_details(request, card_code):
     try:
         card = Card.objects.select_related('company', 'user').get(card_code=card_code)
@@ -630,4 +638,127 @@ def get_card_details(request, card_code):
         return JsonResponse({'error': 'Card not found'}, status=404)
 
 
+@csrf_exempt
+def upload_video(request):
+    if request.method == 'POST' and request.FILES.get('video'):
+        # 获取上传的视频文件
+        video_file = request.FILES['video']
 
+        # 生成视频文件名（使用哈希码）
+        video_name = generate_video_name(video_file)
+
+        # 构建视频保存路径
+        video_path = os.path.join(settings.STATIC_DIR, 'videos', video_name)
+
+        # 保存视频文件到指定路径
+        with open(video_path, 'wb') as destination:
+            for chunk in video_file.chunks():
+                destination.write(chunk)
+
+        domain = 'http://fpi.3p3.top'
+        video_url = os.path.join(settings.STATIC_URL, 'images', image_name)
+        video_url = domain + video_url
+        return JsonResponse({'video_url': video_url})
+        # return JsonResponse({'message': 'Video uploaded successfully'})
+
+    return JsonResponse({'error': 'Invalid request'}, status=400)
+
+def generate_video_name(video_file):
+    # 生成哈希码（可以使用不同的哈希算法）
+    hasher = hashlib.sha256()
+    for chunk in video_file.chunks():
+        hasher.update(chunk)
+    
+    # 使用哈希码的一部分作为文件名
+    hash_part = hasher.hexdigest()[:12]
+
+    # 获取文件扩展名
+    _, extension = os.path.splitext(video_file.name)
+
+    # 组合哈希码和扩展名作为文件名
+    video_name = f'{hash_part}{extension}'
+
+    return video_name
+
+
+
+@csrf_exempt
+def wechat_login(request):
+    if request.method == 'POST':
+        # 从POST请求中获取微信小程序发送的code
+        json_data = json.loads(request.body.decode('utf-8'))
+        code= json_data.get("code")
+        print("code",code)
+        # 向微信服务器发送code以获取用户的unionID等信息
+        response = get_wechat_user_info(code)
+        print(response)
+        # response = {'session_key': '0nIb4FqCbbPXNiOzSVkrCg==', 'openid': 'ox2bR5D44QC4oi_tUy71oAXp7wEs'}
+
+        # 处理微信服务器的响应
+        if response.get('errcode'):
+            return JsonResponse({'error': 'WeChat authentication failed',"detail":response.get('errmsg')}, status=400)
+
+
+        # 从响应中获取unionID
+        open_id = response.get('openid')
+        # open_id = 'wwww3registeredregisteredregisteredregregisterergisteredregistered3233www'
+
+        print("open id",open_id)
+
+        # 检查是否已存在具有相同unionID的用户，如果不存在则创建新用户
+        # user, created = User.objects.get_or_create(username=open_id)
+        # print("用户创建结果",user,created)
+        if User.objects.filter(username=open_id).exists():
+            user = User.objects.filter(username=open_id).first()
+            group_names = user.groups.values_list('name', flat=True).all()
+            group_names = [i for i in group_names]
+            role_name = user.userprofile.role.name
+            token =  generate_jwt_token(user.id, group_names,role_name)
+
+            test = verify_and_decode_token(token)
+            print("已存在用户",test)
+            print(user.userprofile.role)
+            return JsonResponse({
+                'message': 'Login successful',
+                'user_id': user.id,"token":token,
+                "roles":group_names,
+                "role": user.userprofile.role.name,
+            })
+
+        # 创建用户
+        role = Role.objects.get(name='普通人员')
+        group = Group.objects.get(name='普通人员')
+        user = User.objects.create_user(username=open_id)
+        print("tianj group")
+        user.groups.add(group)
+        for _ in range(3):
+            # 创建卡片并设置user字段为注册的用户
+            card = Card(user=user)
+            card.save()
+        print("card save")
+        # 创建关联的UserProfile记录
+        UserProfile.objects.create(user=user, wechat_id=open_id, role=role)
+        print("userfpofile")
+
+
+        return JsonResponse({
+                'message': 'Login successful',
+                'user_id': user.id,"token":token,
+                "roles":group_names,
+                # "role": user.userprofile.role.name,
+            })
+
+    return JsonResponse({'error': 'Invalid request'}, status=400)
+
+def get_wechat_user_info(code):
+    # 向微信服务器发送请求以获取用户信息
+    url = 'https://api.weixin.qq.com/sns/jscode2session'
+    params = {
+        'appid': 'wx3b66399b629ecb67',  # 小程序的AppID
+        'secret': '440e1f31159ffd0b910a85b2aaf37859',  # 小程序的App Secret
+        'js_code': code,
+        'grant_type': 'authorization_code',
+    }
+
+    response = requests.get(url, params=params)
+    return json.loads(response.text)

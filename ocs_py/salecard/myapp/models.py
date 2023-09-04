@@ -1,7 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.auth.models import Group
-from django.contrib.auth.models import User
 from django.utils import timezone
 
 class Company(models.Model):
@@ -17,6 +16,18 @@ class Company(models.Model):
     is_active = models.BooleanField(default=False)  # 添加激活状态字段，默认为未激活
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+    company_type = models.CharField(max_length=100, blank=True, null=True)
+    bossname = models.CharField(max_length=100, blank=True, null=True)
+    credit_code = models.CharField(max_length=100, blank=True, null=True)
+    license_image_url = models.CharField(max_length=100, blank=True, null=True)
+    
+
+    def __str__(self):
+        return self.name
+
+class Role(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    level = models.PositiveIntegerField(unique=True)
 
     def __str__(self):
         return self.name
@@ -30,6 +41,7 @@ class UserProfile(models.Model):
     wechat_id = models.CharField(max_length=500, blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     tiktok_id = models.CharField(max_length=100, blank=True, null=True)
+    identity_id = models.CharField(max_length=100, blank=True, null=True)
     qq = models.CharField(max_length=20, blank=True, null=True)
     email = models.EmailField(max_length=100, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
@@ -39,13 +51,9 @@ class UserProfile(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     highest_role = models.CharField(max_length=20, default='普通人员')
-
-    def __str__(self):
-        return self.name
-
-class Role(models.Model):
-    name = models.CharField(max_length=100, unique=True)
-    level = models.PositiveIntegerField(unique=True)
+    license_front_url = models.CharField(max_length=100, blank=True, null=True)
+    license_back_url = models.CharField(max_length=100, blank=True, null=True)
+    role = models.ForeignKey(Role, related_name='users', on_delete=models.SET_NULL, null=True)
 
     def __str__(self):
         return self.name
@@ -71,7 +79,7 @@ def create_roles():
 
 
 class Card(models.Model):
-    card_code = models.CharField(max_length=12, unique=True)
+    card_code = models.CharField(max_length=12)
     hash_value = models.CharField(max_length=32)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     sender = models.ForeignKey(User, related_name='sent_cards', on_delete=models.SET_NULL, null=True)

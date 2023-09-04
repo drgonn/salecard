@@ -8,6 +8,7 @@ urlpatterns = [
     path('register', UserRegistrationView.as_view(), name='user-registration'),
     path('user_info', views.get_user_info, name='get_user_info'),
     path('upload_image', views.upload_image, name='upload_image'),
+    path('upload_video', views.upload_video, name='upload_video'),
     path('company/list', views.company_list, name='company_list'),
     path('company/detail/<int:company_id>', views.company_detail, name='company_detail'),
     path('company/create', views.create_company, name='create_company'),
@@ -24,4 +25,5 @@ urlpatterns = [
     path('switch_role/', views.switch_role, name='switch_role'),
     path('apply_for_cards/', views.apply_for_cards, name='apply_for_cards'),
     path('card_details/<str:card_code>/', views.get_card_details, name='get_card_details'),
+    path('wechat_login', views.wechat_login, name='wechat_login'),
 ]
